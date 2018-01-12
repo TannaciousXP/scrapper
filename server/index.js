@@ -108,35 +108,78 @@ const getToday = () => {
   return today;
 };
 
-const searchTweets = (topic) => {
-  const topicObj = {};
-  return new Promise((res) => {
-    T.get('search/tweets', { q: `${topic} since:${getToday()}`, count: 5 }, (err, data, response) => {
-      data.statuses = data.statuses.sort((a, b) => b.retweet_count - a.retweet_count);
-      console.log(data.statuses);
-      // console.log(data.statuses[0].entities);
-      // let url = `https://twitter.com/${}/status/${}`
-    })
+const makeURL = (name, tweetId) => {
+  return `https:twitter.com/${name}/status/${tweetId}`;
+}
 
+const searchTweets = (topic) => {
+  const topics = [];
+  const haveTweet = {};
+  let canPush = false;
+  return new Promise((res) => {
+    T.get('search/tweets', { q: `${topic} since:${getToday()}`, count: 100 }, (err, data, response) => {
+      
+      let sortedTweets = data.statuses.sort((a, b) => b.retweet_count - a.retweet_count);
+      let count = 1;
+
+      for (let tweet of sortedTweets) {
+        let csv = [count, tweet.retweet_count];
+        if (tweet.text.substr(0, 4) === 'RT @') {
+          let retweet = tweet.retweeted_status;
+          if (!haveTweet.hasOwnProperty(retweet.id_str)){
+            canPush = true;
+            haveTweet[retweet.id_str] = true;
+            csv[2] = retweet.text;
+            csv[3] = makeURL(retweet.user.screen_name, retweet.id_str);
+          }
+        } else {
+          if (!haveTweet.hasOwnProperty(tweet.id_str)){
+            canPush = true;
+            haveTweet[tweet.id_str] = true;
+            csv[2] = tweet.text;
+            csv[3] = makeURL(tweet.user.screen_name, tweet.id_str);
+          }
+        }        
+        if (canPush) {
+          topics.push(csv);
+          count++;
+          canPush = false;
+        }
+      }
+
+      res(topics);
+      
+    });
   });
 }
 
 
 /*
-Get trends from Twitter, scrapes Reddit Tech and Business page
+Get trends, and tweets from Twitter, scrapes Reddit Tech and Business page
 pipes to the csv file separating the by "- Source"
 */
 const pipeToCSV = async () => {
   let data = [];
   let count = 1;
   let trends = await getTrendsByPlace(sf_woeid);
+  let techTweets = await searchTweets('tech');
+  let businessTweets = await searchTweets('business');
   let tech = await scrapeSubReddit('technology');
   let business = await scrapeSubReddit('business');
+
   data.push(['Rank', 'Popularity', 'Topic', 'Link']);
   data.push(['-', 'TWITTER TRENDS']);
   for (let ele of trends) {
     data.push([count, ele.tweet_volume === null ? 0 : ele.tweet_volume, ele.name, ele.url]);
     count++;
+  }
+  data.push(['-', 'TECH TWEETS']);
+  for (let ele of techTweets) {
+    data.push(ele);
+  }
+  data.push(['-', 'BUSINESS TWEETS']);
+  for (let ele of businessTweets) {
+    data.push(ele);
   }
   data.push(['-', 'REDDIT TECH']);
   for (let ele of tech) {
@@ -151,7 +194,7 @@ const pipeToCSV = async () => {
 
 
 
-// pipeToCSV();
+pipeToCSV();
 
 
 
