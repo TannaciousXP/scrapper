@@ -1,16 +1,14 @@
 import express from 'express';
 import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
-dotenv.config();
 import Twit from 'twit';
 import pollyFill from 'babel-polyfill';
 import request from 'request';
 import cheerio from 'cheerio';
-
-
+import csv from 'fast-csv';
 import path from 'path';
 import fs  from 'fs';
-import csv from 'fast-csv';
+import dotenv from 'dotenv';
+dotenv.config();
 
 
 const app = express();
@@ -108,10 +106,12 @@ const getToday = () => {
   return today;
 };
 
+// Make a twitter URL
 const makeURL = (name, tweetId) => {
   return `https:twitter.com/${name}/status/${tweetId}`;
 }
 
+// Search tweets for a certain topic, makes sure there's no duplicate, and sorted by retweets
 const searchTweets = (topic) => {
   const topics = [];
   const haveTweet = {};
@@ -148,7 +148,7 @@ const searchTweets = (topic) => {
       }
 
       res(topics);
-      
+
     });
   });
 }
@@ -161,6 +161,7 @@ pipes to the csv file separating the by "- Source"
 const pipeToCSV = async () => {
   let data = [];
   let count = 1;
+
   let trends = await getTrendsByPlace(sf_woeid);
   let techTweets = await searchTweets('tech');
   let businessTweets = await searchTweets('business');
@@ -189,13 +190,28 @@ const pipeToCSV = async () => {
   for (let ele of business) {
     data.push(ele);
   }
+
   csv.write(data, { headers: true }).pipe(ws);
 }
 
+let now = new Date();
+let millisTill7AM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 7, 0, 0, 0) - now;
+if (millisTill7AM < 0) {
+  millisTill7AM += 86400000; // it's after 10am, try 10am tomorrow.
+}
+
+let millisTill6PM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 18, 0, 0, 0) - now;
+if (millisTill6PM < 0) {
+  millisTill6PM += 86400000; // it's after 10am, try 10am tomorrow.
+}
+
+// Uncomment to test out the pipeToCSV()
+// pipeToCSV();
 
 
-pipeToCSV();
-
+// Invoke the function at 7AM and 6PM;
+// setTimeout(() => { pipeToCSV() }, millisTill7AM);
+// setTimeout(() => { pipeToCSV() }, millisTill6PM);
 
 
 
